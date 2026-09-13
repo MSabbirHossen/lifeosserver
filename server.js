@@ -28,20 +28,48 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 const app = express();
 
 // Security Headers Middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CORS Middleware
-const allowedOrigins = process.env.CLIENT_ORIGIN ? [process.env.CLIENT_ORIGIN] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const configuredOrigins = (process.env.CLIENT_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const defaultAllowedOrigins = [
+  'https://lifeosclient.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
+const allAllowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...configuredOrigins]));
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Blocked by CORS policy'));
-      }
+      // Allow requests with no origin (like mobile apps, curl, serverless, health checks)
+      if (!origin) return callback(null, true);
+
+      // Allow if explicit match
+      if (allAllowedOrigins.includes(origin)) return callback(null, true);
+
+      // Allow any *.vercel.app deployment preview
+      if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return callback(null, true);
+
+      // Allow non-production environments
+      if (process.env.NODE_ENV !== 'production') return callback(null, true);
+
+      return callback(new Error(`Blocked by CORS policy for origin: ${origin}`));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
@@ -54,6 +82,18 @@ const authLimiter = rateLimit({
   message: { message: 'Too many authentication attempts from this IP, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Root endpoint (Public)
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Life OS API Server',
+    status: 'online',
+    version: '1.0.0',
+    health: '/api/health',
+    clientOrigin: process.env.CLIENT_ORIGIN || 'https://lifeosclient.vercel.app',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Health check endpoint (Public)

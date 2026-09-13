@@ -1,10 +1,12 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
-// Try setting reliable public DNS servers for Atlas SRV lookup on Windows
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch (e) {}
+// Only set custom public DNS servers on local Windows machines (never inside Vercel serverless sandbox)
+if (process.platform === 'win32' && !process.env.VERCEL) {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (e) {}
+}
 
 let cachedConn = null;
 
@@ -63,6 +65,26 @@ export const connectDB = async () => {
   }
 
   const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifeos';
+
+  // In Vercel / serverless environment, connect directly to MongoDB Atlas
+  if (process.env.VERCEL) {
+    console.log('[MongoDB Vercel] Connecting to MongoDB Atlas...');
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 30000,
+      maxPoolSize: 10,
+    });
+    console.log(`[MongoDB Vercel Connected] Host: ${conn.connection.host} | DB: ${conn.connection.name}`);
+
+    try {
+      await mongoose.connection.collection('users').dropIndex('username_1');
+    } catch (e) {}
+
+    cachedConn = conn;
+    await seedDemoUser();
+    return conn;
+  }
 
   const isReachable = await checkAtlasReachable(uri);
 
