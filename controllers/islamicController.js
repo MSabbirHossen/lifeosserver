@@ -94,7 +94,31 @@ export const getQadaLogs = async (req, res) => {
 
 export const updateQada = async (req, res) => {
   try {
-    const { prayerName, totalOwed, incrementCompleted, setCompleted } = req.body;
+    const { prayerName, prayers, totalOwed, incrementCompleted, setCompleted } = req.body;
+
+    // Support batch update if prayerName is 'All' or if array of prayers is passed
+    if (prayerName === 'All' || Array.isArray(prayers) || Array.isArray(prayerName)) {
+      const targets = Array.isArray(prayers)
+        ? prayers
+        : Array.isArray(prayerName)
+        ? prayerName
+        : ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha', 'Witr'];
+
+      const updatedRecords = [];
+      for (const p of targets) {
+        let record = await QadaLog.findOne({ userId: req.user._id, prayerName: p });
+        if (!record) {
+          record = new QadaLog({ userId: req.user._id, prayerName: p, totalOwed: 0, totalCompleted: 0 });
+        }
+        if (totalOwed !== undefined) record.totalOwed = Math.max(0, Number(totalOwed));
+        if (incrementCompleted) record.totalCompleted = Math.max(0, record.totalCompleted + Number(incrementCompleted));
+        if (setCompleted !== undefined) record.totalCompleted = Math.max(0, Number(setCompleted));
+        await record.save();
+        updatedRecords.push(record);
+      }
+      return res.json(updatedRecords);
+    }
+
     if (!prayerName) return res.status(400).json({ message: 'Prayer name is required' });
 
     let record = await QadaLog.findOne({ userId: req.user._id, prayerName });
