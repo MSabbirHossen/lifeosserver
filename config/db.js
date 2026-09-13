@@ -9,6 +9,7 @@ if (process.platform === 'win32' && !process.env.VERCEL) {
 }
 
 let cachedConn = null;
+export let lastDbError = null;
 
 const seedDemoUser = async () => {
   try {
@@ -64,29 +65,48 @@ export const connectDB = async () => {
     return cachedConn;
   }
 
-  const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifeos';
+  // Prevent Mongoose from queuing queries for 10s if disconnected
+  mongoose.set('bufferCommands', false);
+
+  const uri = process.env.MONGODB_URI;
 
   // In Vercel / serverless environment, connect directly to MongoDB Atlas
   if (process.env.VERCEL) {
-    console.log('[MongoDB Vercel] Connecting to MongoDB Atlas...');
-    const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 8000,
-      socketTimeoutMS: 30000,
-      maxPoolSize: 10,
-    });
-    console.log(`[MongoDB Vercel Connected] Host: ${conn.connection.host} | DB: ${conn.connection.name}`);
+    if (!uri) {
+      const missingErr = new Error(
+        'MONGODB_URI is not set in Vercel Environment Variables. Please add MONGODB_URI in your Vercel Project Settings.'
+      );
+      lastDbError = missingErr.message;
+      throw missingErr;
+    }
 
     try {
-      await mongoose.connection.collection('users').dropIndex('username_1');
-    } catch (e) {}
+      console.log('[MongoDB Vercel] Connecting to MongoDB Atlas...');
+      const conn = await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 6000,
+        connectTimeoutMS: 6000,
+        socketTimeoutMS: 30000,
+        maxPoolSize: 10,
+      });
+      console.log(`[MongoDB Vercel Connected] Host: ${conn.connection.host} | DB: ${conn.connection.name}`);
+      lastDbError = null;
 
-    cachedConn = conn;
-    await seedDemoUser();
-    return conn;
+      try {
+        await mongoose.connection.collection('users').dropIndex('username_1');
+      } catch (e) {}
+
+      cachedConn = conn;
+      await seedDemoUser();
+      return conn;
+    } catch (err) {
+      lastDbError = err.message;
+      console.error('[MongoDB Vercel Error]:', err.message);
+      throw err;
+    }
   }
 
-  const isReachable = await checkAtlasReachable(uri);
+  const resolvedUri = uri || 'mongodb://127.0.0.1:27017/lifeos';
+  const isReachable = await checkAtlasReachable(resolvedUri);
 
   if (isReachable) {
     try {

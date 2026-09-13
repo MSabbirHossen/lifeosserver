@@ -12,7 +12,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { connectDB } from './config/db.js';
+import { connectDB, lastDbError } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import timeTrackerRoutes from './routes/timeTrackerRoutes.js';
@@ -97,18 +97,53 @@ app.get('/', (req, res) => {
 });
 
 // Health check endpoint (Public)
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let connectError = null;
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await connectDB();
+    } catch (err) {
+      connectError = err.message;
+    }
+  }
+
   const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   const dbState = mongoose.connection.readyState;
+  const rawUri = process.env.MONGODB_URI || '';
+  const maskedUri = rawUri
+    ? rawUri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')
+    : 'NOT_SET';
+
   res.json({
     status: 'ok',
     message: 'Life OS API Server running',
     dbState: states[dbState] || dbState,
     dbHost: mongoose.connection.host || null,
     dbName: mongoose.connection.name || null,
+    hasMongoUriEnv: Boolean(process.env.MONGODB_URI),
+    mongoUriMasked: maskedUri,
+    dbError: connectError || lastDbError || null,
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
   });
+});
+
+// Database Readiness Middleware for all /api endpoints (prevents 10s timeouts)
+app.use('/api', async (req, res, next) => {
+  if (req.path === '/health') return next();
+
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await connectDB();
+    } catch (err) {
+      return res.status(503).json({
+        message: `Database connection unavailable: ${err.message}. Please verify that MONGODB_URI is set in Vercel settings and MongoDB Atlas allows 0.0.0.0/0.`,
+        dbState: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState],
+        error: err.message,
+      });
+    }
+  }
+  next();
 });
 
 // API Routes
