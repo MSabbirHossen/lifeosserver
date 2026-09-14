@@ -98,6 +98,21 @@ export const getHabits = async (req, res) => {
       const isCompletedToday = completedDates.includes(targetDate);
       const todayLog = habitLogs.find((l) => l.date === targetDate);
 
+      // Determine days since last completed (for incomplete habits)
+      const lastCompletedDate = completedDates.length > 0 ? completedDates[0] : null;
+      let daysSinceLastCompleted = 0;
+      if (isCompletedToday) {
+        daysSinceLastCompleted = 0;
+      } else if (lastCompletedDate) {
+        daysSinceLastCompleted = Math.max(1, getDaysDifference(targetDate, lastCompletedDate));
+      } else {
+        // Never completed: calculate days since creation + 1000 so never-completed rank as most incomplete
+        const createdDateStr = habit.createdAt
+          ? new Date(habit.createdAt).toISOString().split('T')[0]
+          : targetDate;
+        daysSinceLastCompleted = Math.max(1, getDaysDifference(targetDate, createdDateStr)) + 1000;
+      }
+
       return {
         ...habit.toObject(),
         isCompletedToday,
@@ -105,7 +120,25 @@ export const getHabits = async (req, res) => {
         currentStreak,
         bestStreak,
         totalCompletions: completedDates.length,
+        lastCompletedDate,
+        daysSinceLastCompleted,
       };
+    });
+
+    // Auto-sort habits: incomplete habits first (ordered by daysSinceLastCompleted DESC),
+    // and completed habits automatically sorted to the last of the list for the day
+    enrichedHabits.sort((a, b) => {
+      if (!a.isCompletedToday && b.isCompletedToday) return -1;
+      if (a.isCompletedToday && !b.isCompletedToday) return 1;
+
+      if (!a.isCompletedToday && !b.isCompletedToday) {
+        if (b.daysSinceLastCompleted !== a.daysSinceLastCompleted) {
+          return b.daysSinceLastCompleted - a.daysSinceLastCompleted;
+        }
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+
+      return (b.currentStreak || 0) - (a.currentStreak || 0);
     });
 
     res.json(enrichedHabits);
