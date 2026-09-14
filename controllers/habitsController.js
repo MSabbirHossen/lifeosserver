@@ -264,22 +264,53 @@ export const toggleHabitLog = async (req, res) => {
   }
 };
 
-// @desc    Get rolling 84-day (12-week) heatmap data for all or specific habit
+// @desc    Get GitHub-style heatmap data (53 weeks rolling, specific year, or lifetime)
 // @route   GET /api/habits/heatmap
 // @access  Private
 export const getHabitHeatmap = async (req, res) => {
   try {
-    const { habitId, weeks = 12 } = req.query;
-    const totalDays = parseInt(weeks, 10) * 7;
+    const { habitId, weeks = 53, year } = req.query;
 
-    // Generate date array for last N days ending today
-    const dates = [];
+    let dates = [];
     const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
 
-    for (let i = totalDays - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      dates.push(d.toISOString().split('T')[0]);
+    if (year && !isNaN(parseInt(year, 10))) {
+      // Full Calendar Year (Jan 1 to Dec 31) aligned to Sunday start and Saturday end
+      const targetYear = parseInt(year, 10);
+      const janFirst = new Date(targetYear, 0, 1);
+      const decLast = new Date(targetYear, 11, 31);
+
+      // Start on Sunday of Jan 1 week
+      const startDate = new Date(janFirst);
+      startDate.setDate(janFirst.getDate() - janFirst.getDay());
+
+      // End on Saturday of Dec 31 week
+      const endDate = new Date(decLast);
+      endDate.setDate(decLast.getDate() + (6 - decLast.getDay()));
+
+      const cur = new Date(startDate);
+      while (cur <= endDate) {
+        dates.push(cur.toISOString().split('T')[0]);
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      // Rolling N weeks (default 53 weeks = full rolling year) ending today's Saturday
+      const numWeeks = parseInt(weeks, 10) || 53;
+      const currentDayOfWeek = today.getDay(); // 0 = Sun, 6 = Sat
+      const currentWeekSunday = new Date(today);
+      currentWeekSunday.setDate(today.getDate() - currentDayOfWeek);
+
+      const startDate = new Date(currentWeekSunday);
+      startDate.setDate(startDate.getDate() - (numWeeks - 1) * 7);
+
+      for (let w = 0; w < numWeeks; w++) {
+        for (let d = 0; d < 7; d++) {
+          const dayDate = new Date(startDate);
+          dayDate.setDate(startDate.getDate() + w * 7 + d);
+          dates.push(dayDate.toISOString().split('T')[0]);
+        }
+      }
     }
 
     const filter = {
@@ -292,7 +323,11 @@ export const getHabitHeatmap = async (req, res) => {
       filter.habitId = habitId;
     }
 
-    const logs = await HabitLog.find(filter);
+    const [logs, allUserLogs, activeHabitsCount] = await Promise.all([
+      HabitLog.find(filter),
+      HabitLog.find({ userId: req.user._id, completed: true }).select('date').sort({ date: -1 }),
+      Habit.countDocuments({ userId: req.user._id, archived: false }),
+    ]);
 
     // Group logs count by date
     const countsByDate = {};
@@ -300,10 +335,18 @@ export const getHabitHeatmap = async (req, res) => {
       countsByDate[log.date] = (countsByDate[log.date] || 0) + 1;
     });
 
-    const activeHabitsCount = await Habit.countDocuments({
-      userId: req.user._id,
-      archived: false,
-    });
+    // Compute lifetime metrics
+    const allUniqueDates = Array.from(new Set(allUserLogs.map((l) => l.date)));
+    const totalLifetimeCompletions = allUserLogs.length;
+    const totalLifetimeActiveDays = allUniqueDates.length;
+
+    // Available years from logs, plus current year
+    const yearSet = new Set(allUniqueDates.map((d) => parseInt(d.split('-')[0], 10)));
+    yearSet.add(today.getFullYear());
+    const availableYears = Array.from(yearSet).sort((a, b) => b - a);
+
+    // Lifetime best streak
+    const { bestStreak: allTimeBestStreak } = calculateStreak(allUniqueDates, todayStr);
 
     const heatmapData = dates.map((d) => {
       const completedCount = countsByDate[d] || 0;
@@ -328,6 +371,12 @@ export const getHabitHeatmap = async (req, res) => {
       endDate: dates[dates.length - 1],
       totalActiveHabits: activeHabitsCount,
       heatmap: heatmapData,
+      lifetimeStats: {
+        totalCompletions: totalLifetimeCompletions,
+        totalActiveDays: totalLifetimeActiveDays,
+        bestStreak: allTimeBestStreak,
+        availableYears,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Failed to fetch heatmap' });
