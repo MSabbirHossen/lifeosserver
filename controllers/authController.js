@@ -51,6 +51,7 @@ export const registerUser = async (req, res) => {
         dailyCalorieGoal: user.dailyCalorieGoal,
         weightGoal: user.weightGoal,
         screenTimeGoalMinutes: user.screenTimeGoalMinutes,
+        currency: user.currency || 'USD',
         token: generateToken(user._id),
       });
     } else {
@@ -99,6 +100,7 @@ export const loginUser = async (req, res) => {
         dailyCalorieGoal: user.dailyCalorieGoal,
         weightGoal: user.weightGoal,
         screenTimeGoalMinutes: user.screenTimeGoalMinutes,
+        currency: user.currency || 'USD',
         token: generateToken(user._id),
       });
     } else {
@@ -259,6 +261,7 @@ export const googleAuth = async (req, res) => {
       dailyCalorieGoal: user.dailyCalorieGoal,
       weightGoal: user.weightGoal,
       screenTimeGoalMinutes: user.screenTimeGoalMinutes,
+      currency: user.currency || 'USD',
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -286,6 +289,7 @@ export const getUserProfile = async (req, res) => {
         dailyCalorieGoal: user.dailyCalorieGoal,
         weightGoal: user.weightGoal,
         screenTimeGoalMinutes: user.screenTimeGoalMinutes,
+        currency: user.currency || 'USD',
       });
     } else {
       res.status(404).json({ message: 'User not found' });
@@ -311,6 +315,7 @@ export const updateUserProfile = async (req, res) => {
       if (req.body.dailyCalorieGoal) user.dailyCalorieGoal = req.body.dailyCalorieGoal;
       if (req.body.weightGoal) user.weightGoal = req.body.weightGoal;
       if (req.body.screenTimeGoalMinutes) user.screenTimeGoalMinutes = req.body.screenTimeGoalMinutes;
+      if (req.body.currency) user.currency = req.body.currency.trim().toUpperCase();
 
       if (req.body.password) {
         user.passwordHash = req.body.password;
@@ -329,6 +334,7 @@ export const updateUserProfile = async (req, res) => {
         dailyCalorieGoal: updatedUser.dailyCalorieGoal,
         weightGoal: updatedUser.weightGoal,
         screenTimeGoalMinutes: updatedUser.screenTimeGoalMinutes,
+        currency: updatedUser.currency || 'USD',
         token: generateToken(updatedUser._id),
       });
     } else {

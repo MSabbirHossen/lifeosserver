@@ -31,8 +31,7 @@ const transactionSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      enum: ['SAR', 'BDT', 'USD'],
-      default: 'SAR',
+      default: 'USD',
       uppercase: true,
       trim: true,
     },
@@ -53,7 +52,8 @@ const transactionSchema = new mongoose.Schema(
     },
     toCurrency: {
       type: String,
-      enum: ['SAR', 'BDT', 'USD'],
+      uppercase: true,
+      trim: true,
     },
     toAmount: {
       type: Number,

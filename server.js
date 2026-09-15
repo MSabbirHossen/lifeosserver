@@ -148,6 +148,7 @@ app.use('/api', async (req, res, next) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', authRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/time-tracker', timeTrackerRoutes);
 app.use('/api/finance', financeRoutes);

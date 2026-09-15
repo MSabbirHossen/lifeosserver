@@ -57,6 +57,12 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 120,
     },
+    currency: {
+      type: String,
+      default: 'USD',
+      uppercase: true,
+      trim: true,
+    },
   },
   {
     timestamps: true,

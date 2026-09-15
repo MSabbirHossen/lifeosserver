@@ -145,6 +145,7 @@ export const getDashboardSummary = async (req, res) => {
         dailyCalorieGoal: calorieGoal,
         weightGoal: req.user.weightGoal || 70,
         screenTimeGoalMinutes: req.user.screenTimeGoalMinutes || 120,
+        currency: (req.user.currency || 'USD').toUpperCase(),
       },
       summary: {
         journal: journal || null,
@@ -187,6 +188,7 @@ export const getDashboardSummary = async (req, res) => {
           expensesToday,
           expensesMonth,
           incomeToday,
+          currency: (req.user.currency || 'USD').toUpperCase(),
         },
         habits: {
           activeCount: habits.length,
