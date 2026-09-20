@@ -1,10 +1,17 @@
 import { Habit } from '../models/Habit.js';
 import { HabitLog } from '../models/HabitLog.js';
 
-// Helper: Calculate difference in days between two YYYY-MM-DD strings
+// Helper: Calculate difference in calendar days between two YYYY-MM-DD strings using UTC
+const parseYMD = (str) => {
+  if (!str || typeof str !== 'string') return 0;
+  const parts = str.split('-').map(Number);
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return 0;
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+};
+
 const getDaysDifference = (d1Str, d2Str) => {
-  const t1 = new Date(d1Str).getTime();
-  const t2 = new Date(d2Str).getTime();
+  const t1 = parseYMD(d1Str);
+  const t2 = parseYMD(d2Str);
   return Math.round((t1 - t2) / (1000 * 3600 * 24));
 };
 
@@ -21,7 +28,7 @@ const calculateStreak = (logDates, todayStr) => {
   let bestStreak = 0;
   let tempStreak = 0;
 
-  // Compute best streak overall
+  // Compute best streak overall across all completed dates
   if (uniqueSortedDates.length > 0) {
     tempStreak = 1;
     bestStreak = 1;
@@ -37,22 +44,32 @@ const calculateStreak = (logDates, todayStr) => {
     }
   }
 
-  // Compute current streak (must start from today or yesterday)
-  const mostRecent = uniqueSortedDates[0];
-  const diffFromToday = getDaysDifference(todayStr, mostRecent);
+  // Compute current streak (filter out future dates to avoid timezone/scheduling skew)
+  const validDates = uniqueSortedDates.filter((d) => d <= todayStr);
 
-  if (diffFromToday === 0 || diffFromToday === 1) {
-    currentStreak = 1;
-    for (let i = 0; i < uniqueSortedDates.length - 1; i++) {
-      const diff = getDaysDifference(uniqueSortedDates[i], uniqueSortedDates[i + 1]);
-      if (diff === 1) {
-        currentStreak++;
-      } else {
-        break;
+  if (validDates.length > 0) {
+    const mostRecent = validDates[0];
+    const diffFromToday = getDaysDifference(todayStr, mostRecent);
+
+    if (diffFromToday === 0 || diffFromToday === 1) {
+      currentStreak = 1;
+      for (let i = 0; i < validDates.length - 1; i++) {
+        const diff = getDaysDifference(validDates[i], validDates[i + 1]);
+        if (diff === 1) {
+          currentStreak++;
+        } else {
+          break;
+        }
       }
+    } else {
+      currentStreak = 0;
     }
   } else {
     currentStreak = 0;
+  }
+
+  if (currentStreak > bestStreak) {
+    bestStreak = currentStreak;
   }
 
   return { currentStreak, bestStreak };
