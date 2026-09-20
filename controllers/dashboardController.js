@@ -9,6 +9,24 @@ import { SalahLog } from '../models/SalahLog.js';
 import { Habit } from '../models/Habit.js';
 import { HabitLog } from '../models/HabitLog.js';
 import { Goal } from '../models/Goal.js';
+import { WaterLog } from '../models/WaterLog.js';
+import { QuranLog } from '../models/QuranLog.js';
+import { AdhkarLog } from '../models/AdhkarLog.js';
+import { HadithLog } from '../models/HadithLog.js';
+
+// Helper: calculate absolute integer calendar day difference using UTC to avoid DST/timezone jitter
+const parseYMD = (str) => {
+  if (!str || typeof str !== 'string') return 0;
+  const parts = str.split('-').map(Number);
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return 0;
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+};
+
+const getDaysDiff = (d1, d2) => {
+  const t1 = parseYMD(d1);
+  const t2 = parseYMD(d2);
+  return Math.round((t1 - t2) / (1000 * 3600 * 24));
+};
 
 export const getDashboardSummary = async (req, res) => {
   try {
@@ -29,6 +47,10 @@ export const getDashboardSummary = async (req, res) => {
       habits,
       habitLogs,
       goals,
+      waterLogs,
+      quranLogs,
+      adhkarLogs,
+      hadithLogs,
     ] = await Promise.all([
       Journal.findOne({ userId, date }),
       JournalPrompt.find().sort({ lastServedAt: 1 }).limit(1),
@@ -42,6 +64,10 @@ export const getDashboardSummary = async (req, res) => {
       Habit.find({ userId, archived: false }),
       HabitLog.find({ userId, date }),
       Goal.find({ userId, status: 'active' }),
+      WaterLog.find({ userId, date }),
+      QuranLog.find({ userId, date }),
+      AdhkarLog.find({ userId, date }),
+      HadithLog.find({ userId, date }),
     ]);
 
     // Time calculation
@@ -85,21 +111,45 @@ export const getDashboardSummary = async (req, res) => {
     const habitsCompletedToday = habitLogs.filter((h) => h.completed).length;
 
     // Cross-Module Global Continuous Streak Calculation
-    const allCompletedDates = new Set([
+    const allCompletedDatesToday = new Set([
       ...habitLogs.filter((h) => h.completed).map((h) => h.date),
       ...studies.map((s) => s.date),
       ...workouts.map((w) => w.date),
       ...timeLogs.map((t) => t.date),
       ...(journal ? [journal.date] : []),
       ...salahLogs.filter((s) => s.status && s.status !== 'missed' && s.status !== 'pending').map((s) => s.date),
+      ...waterLogs.filter((w) => (w.glasses || 0) > 0 || (w.ml || 0) > 0).map((w) => w.date),
+      ...meals.map((m) => m.date),
+      ...quranLogs.map((q) => q.date),
+      ...adhkarLogs.filter((a) => a.morningCompleted || a.eveningCompleted).map((a) => a.date),
+      ...hadithLogs.map((h) => h.date),
     ]);
 
-    // Query past 90 days activity to determine unbroken consecutive streak
-    const [pastHabitLogs, pastStudies, pastWorkouts, pastTimeLogs] = await Promise.all([
+    // Query past activity across all active Life OS modules to determine unbroken consecutive streak
+    const [
+      pastHabitLogs,
+      pastStudies,
+      pastWorkouts,
+      pastTimeLogs,
+      pastJournals,
+      pastSalahLogs,
+      pastWaterLogs,
+      pastMeals,
+      pastQuranLogs,
+      pastAdhkarLogs,
+      pastHadithLogs,
+    ] = await Promise.all([
       HabitLog.distinct('date', { userId, completed: true }),
       StudySession.distinct('date', { userId }),
       Workout.distinct('date', { userId }),
       TimeLog.distinct('date', { userId }),
+      Journal.distinct('date', { userId }),
+      SalahLog.distinct('date', { userId, status: { $nin: ['missed', 'pending'] } }),
+      WaterLog.distinct('date', { userId, $or: [{ glasses: { $gt: 0 } }, { ml: { $gt: 0 } }] }),
+      Meal.distinct('date', { userId }),
+      QuranLog.distinct('date', { userId }),
+      AdhkarLog.distinct('date', { userId, $or: [{ morningCompleted: true }, { eveningCompleted: true }] }),
+      HadithLog.distinct('date', { userId }),
     ]);
 
     const globalActiveDates = Array.from(new Set([
@@ -107,23 +157,32 @@ export const getDashboardSummary = async (req, res) => {
       ...pastStudies,
       ...pastWorkouts,
       ...pastTimeLogs,
-      ...Array.from(allCompletedDates),
+      ...pastJournals,
+      ...pastSalahLogs,
+      ...pastWaterLogs,
+      ...pastMeals,
+      ...pastQuranLogs,
+      ...pastAdhkarLogs,
+      ...pastHadithLogs,
+      ...Array.from(allCompletedDatesToday),
     ])).sort((a, b) => (a < b ? 1 : -1));
 
     const todayDateStr = date;
     const isSecuredToday = globalActiveDates.includes(todayDateStr);
 
-    let globalStreak = 0;
-    const getDaysDiff = (d1, d2) => Math.round((new Date(d1).getTime() - new Date(d2).getTime()) / (1000 * 3600 * 24));
+    // Filter to dates up to todayDateStr to prevent scheduled/future records from zeroing streak
+    const pastOrTodayActiveDates = globalActiveDates.filter((d) => d <= todayDateStr);
 
-    if (globalActiveDates.length > 0) {
-      const mostRecent = globalActiveDates[0];
+    let globalStreak = 0;
+
+    if (pastOrTodayActiveDates.length > 0) {
+      const mostRecent = pastOrTodayActiveDates[0];
       const diffFromToday = getDaysDiff(todayDateStr, mostRecent);
 
       if (diffFromToday === 0 || diffFromToday === 1) {
         globalStreak = 1;
-        for (let i = 0; i < globalActiveDates.length - 1; i++) {
-          const stepDiff = getDaysDiff(globalActiveDates[i], globalActiveDates[i + 1]);
+        for (let i = 0; i < pastOrTodayActiveDates.length - 1; i++) {
+          const stepDiff = getDaysDiff(pastOrTodayActiveDates[i], pastOrTodayActiveDates[i + 1]);
           if (stepDiff === 1) {
             globalStreak++;
           } else {
@@ -154,7 +213,7 @@ export const getDashboardSummary = async (req, res) => {
           currentStreak: globalStreak,
           isSecuredToday,
           activeDatesCount: globalActiveDates.length,
-          todayActionsCount: allCompletedDates.size,
+          todayActionsCount: allCompletedDatesToday.size,
         },
         time: {
           totalMinutes: timeMinutesTotal,
