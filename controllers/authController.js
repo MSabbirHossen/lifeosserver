@@ -6,7 +6,7 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_jwt_key_change_in_production_lifeos_2026', {
-    expiresIn: '30d',
+    expiresIn: '3650d',
   });
 };
 
@@ -290,6 +290,7 @@ export const getUserProfile = async (req, res) => {
         weightGoal: user.weightGoal,
         screenTimeGoalMinutes: user.screenTimeGoalMinutes,
         currency: user.currency || 'USD',
+        token: generateToken(user._id),
       });
     } else {
       res.status(404).json({ message: 'User not found' });
