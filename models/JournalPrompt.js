@@ -9,7 +9,7 @@ const journalPromptSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['gratitude', 'growth', 'deen', 'productivity', 'relationships'],
+      enum: ['gratitude', 'growth', 'deen', 'productivity', 'relationships', 'mindset', 'discipline'],
       default: 'gratitude',
     },
     lastServedAt: {

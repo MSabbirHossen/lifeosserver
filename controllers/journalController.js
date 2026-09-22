@@ -33,23 +33,36 @@ export const getJournalPrompt = async (req, res) => {
     let prompts = await JournalPrompt.find().sort({ lastServedAt: 1 });
 
     // Seed default prompts if none exist
-    if (prompts.length === 0) {
-      await JournalPrompt.insertMany(DEFAULT_JOURNAL_PROMPTS);
+    if (!prompts || prompts.length === 0) {
+      try {
+        await JournalPrompt.insertMany(DEFAULT_JOURNAL_PROMPTS, { ordered: false });
+      } catch (insertErr) {
+        console.warn('Journal prompt initial seed notice:', insertErr.message);
+      }
       prompts = await JournalPrompt.find().sort({ lastServedAt: 1 });
+    }
+
+    if (!prompts || prompts.length === 0) {
+      const fallback = DEFAULT_JOURNAL_PROMPTS[Math.floor(Math.random() * DEFAULT_JOURNAL_PROMPTS.length)];
+      return res.json(fallback);
     }
 
     // Pick randomly from the bottom 50% (least recently served)
     const poolSize = Math.max(1, Math.ceil(prompts.length / 2));
     const pool = prompts.slice(0, poolSize);
-    const selectedPrompt = pool[Math.floor(Math.random() * pool.length)];
+    const selectedPrompt = pool[Math.floor(Math.random() * pool.length)] || prompts[0];
 
     // Update lastServedAt
-    selectedPrompt.lastServedAt = new Date();
-    await selectedPrompt.save();
+    if (selectedPrompt && selectedPrompt._id) {
+      selectedPrompt.lastServedAt = new Date();
+      await selectedPrompt.save().catch((e) => console.warn('Prompt lastServedAt update notice:', e.message));
+    }
 
     res.json(selectedPrompt);
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Failed to fetch prompt' });
+    console.error('getJournalPrompt error:', error);
+    const fallback = DEFAULT_JOURNAL_PROMPTS[Math.floor(Math.random() * DEFAULT_JOURNAL_PROMPTS.length)];
+    res.json(fallback);
   }
 };
 
