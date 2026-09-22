@@ -19,6 +19,10 @@ import {
   deleteQuranLog,
   getAdhkarLog,
   logAdhkar,
+  getIslamicFasts,
+  logIslamicFast,
+  deleteIslamicFast,
+  getIslamicFastsSummary,
 } from '../controllers/islamicController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -46,4 +50,10 @@ router.route('/quran').get(getQuranLogs).post(logQuran);
 router.route('/quran/:id').put(updateQuranLog).delete(deleteQuranLog);
 router.route('/adhkar').get(getAdhkarLog).post(logAdhkar);
 
+// Islamic Fasting (Sawm / Siyam)
+router.route('/fasts').get(getIslamicFasts).post(logIslamicFast);
+router.route('/fasts/summary').get(getIslamicFastsSummary);
+router.route('/fasts/:id').delete(deleteIslamicFast);
+
 export default router;
+

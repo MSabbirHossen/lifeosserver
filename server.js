@@ -155,7 +155,7 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/habits', habitsRoutes);
 app.use('/api/health-module', healthRoutes);
 app.use('/api', healthRoutes); // Mount health endpoints (/meals, /workouts, /body-metrics, /water, /summary, /food-items/search, /workout-types/search)
-app.use('/api/islamic', islamicRoutes);
+app.use('/api/islamic', islamicRoutes); // Mounted: /salah, /qada, /hadith, /vows, /quran, /adhkar, /fasts
 app.use('/api/study', studyRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/reports', reportsRoutes);

@@ -4,6 +4,7 @@ import { QuranLog } from '../models/QuranLog.js';
 import { AdhkarLog } from '../models/AdhkarLog.js';
 import { HadithLog } from '../models/HadithLog.js';
 import { QadaLog } from '../models/QadaLog.js';
+import { IslamicFast } from '../models/IslamicFast.js';
 
 const PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha', 'Witr'];
 
@@ -366,3 +367,104 @@ export const logAdhkar = async (req, res) => {
     res.status(500).json({ message: error.message || 'Failed to log Adhkar' });
   }
 };
+
+// --- Islamic Fast Tracker (Sawm / Siyam) ---
+
+export const getIslamicFasts = async (req, res) => {
+  try {
+    const { date, year, limit } = req.query;
+    const query = { userId: req.user._id };
+    if (date) query.date = date;
+    else if (year) query.date = new RegExp(`^${year}`);
+
+    const fasts = await IslamicFast.find(query)
+      .sort({ date: -1 })
+      .limit(limit ? Number(limit) : 100);
+
+    res.json(fasts);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to fetch Islamic fasts' });
+  }
+};
+
+export const logIslamicFast = async (req, res) => {
+  try {
+    const { date, type, status, suhoorTime, iftarTime, notes } = req.body;
+    if (!date) return res.status(400).json({ message: 'Date is required' });
+
+    if (status === 'none') {
+      await IslamicFast.findOneAndDelete({ userId: req.user._id, date });
+      return res.json({ message: 'Fast removed for date', date });
+    }
+
+    const fast = await IslamicFast.findOneAndUpdate(
+      { userId: req.user._id, date },
+      {
+        type: type || 'sunnah_mon_thu',
+        status: status || 'completed',
+        suhoorTime: suhoorTime || '',
+        iftarTime: iftarTime || '',
+        notes: notes !== undefined ? notes : '',
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json(fast);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to log Islamic fast' });
+  }
+};
+
+export const deleteIslamicFast = async (req, res) => {
+  try {
+    const fast = await IslamicFast.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id,
+    });
+    if (!fast) return res.status(404).json({ message: 'Islamic fast log not found' });
+    res.json({ message: 'Islamic fast log deleted successfully', id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to delete Islamic fast' });
+  }
+};
+
+export const getIslamicFastsSummary = async (req, res) => {
+  try {
+    const allFasts = await IslamicFast.find({ userId: req.user._id });
+
+    const completedFasts = allFasts.filter((f) => f.status === 'completed');
+    const ramadanFasts = completedFasts.filter((f) => f.type === 'ramadan').length;
+    const sunnahMonThu = completedFasts.filter((f) => f.type === 'sunnah_mon_thu').length;
+    const ayyamAlBeed = completedFasts.filter((f) => f.type === 'ayyam_al_beed').length;
+    const ashuraFasts = completedFasts.filter((f) => f.type === 'ashura').length;
+    const arafahFasts = completedFasts.filter((f) => f.type === 'arafah').length;
+    const shawwalFasts = completedFasts.filter((f) => f.type === 'shawwal').length;
+    const qadaFasts = completedFasts.filter((f) => f.type === 'qada').length;
+    const nazrFasts = completedFasts.filter((f) => f.type === 'nazr').length;
+    const naflFasts = completedFasts.filter((f) => f.type === 'nafl').length;
+
+    const sunnahTotal = sunnahMonThu + ayyamAlBeed + ashuraFasts + arafahFasts + shawwalFasts + naflFasts;
+
+    res.json({
+      totalCompleted: completedFasts.length,
+      ramadanCount: ramadanFasts,
+      sunnahCount: sunnahTotal,
+      qadaCount: qadaFasts,
+      nazrCount: nazrFasts,
+      breakdown: {
+        ramadan: ramadanFasts,
+        sunnah_mon_thu: sunnahMonThu,
+        ayyam_al_beed: ayyamAlBeed,
+        ashura: ashuraFasts,
+        arafah: arafahFasts,
+        shawwal: shawwalFasts,
+        qada: qadaFasts,
+        nazr: nazrFasts,
+        nafl: naflFasts,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to fetch fasting summary' });
+  }
+};
+
