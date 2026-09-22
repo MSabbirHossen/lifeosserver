@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  getFrequentFoodItems,
   searchFoodItems,
   getMeals,
   createMeal,
@@ -26,6 +27,7 @@ router.use(protect);
 
 // Summary & Autocomplete
 router.get('/summary', getHealthSummary);
+router.get('/food-items/frequent', getFrequentFoodItems);
 router.get('/food-items/search', searchFoodItems);
 router.get('/workout-types/search', searchWorkoutTypes);
 

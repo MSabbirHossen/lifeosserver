@@ -422,6 +422,263 @@ export const deleteWorkout = async (req, res) => {
 
 // --- Autocomplete Searches with Curated & Online APIs ---
 
+// Helper for assigning relevant emoji icon to food name
+export const getFoodIcon = (name = '') => {
+  const n = name.toLowerCase();
+  if (n.includes('egg') || n.includes('omelet') || n.includes('dim')) return '🥚';
+  if (n.includes('chicken') || n.includes('poultry') || n.includes('murgh')) return '🍗';
+  if (n.includes('beef') || n.includes('steak') || n.includes('meat') || n.includes('mutton') || n.includes('gosht')) return '🥩';
+  if (n.includes('fish') || n.includes('salmon') || n.includes('tuna') || n.includes('shrimp') || n.includes('prawn') || n.includes('mach')) return '🐟';
+  if (n.includes('rice') || n.includes('bhat') || n.includes('biryani') || n.includes('khichuri')) return '🍚';
+  if (n.includes('oat') || n.includes('porridge') || n.includes('cereal') || n.includes('soup') || n.includes('haleem')) return '🥣';
+  if (n.includes('banana') || n.includes('kela')) return '🍌';
+  if (n.includes('apple')) return '🍎';
+  if (n.includes('avocado')) return '🥑';
+  if (n.includes('date') || n.includes('khejur')) return '🌴';
+  if (n.includes('bread') || n.includes('roti') || n.includes('chapati') || n.includes('toast') || n.includes('naan') || n.includes('paratha')) return '🍞';
+  if (n.includes('milk') || n.includes('yogurt') || n.includes('dahi') || n.includes('curd') || n.includes('shake') || n.includes('whey')) return '🥛';
+  if (n.includes('cheese') || n.includes('paneer')) return '🧀';
+  if (n.includes('coffee') || n.includes('tea') || n.includes('cha')) return '☕';
+  if (n.includes('salad') || n.includes('lettuce') || n.includes('cucumber') || n.includes('spinach') || n.includes('shak') || n.includes('broccoli')) return '🥗';
+  if (n.includes('potato') || n.includes('alu') || n.includes('fries')) return '🥔';
+  if (n.includes('nut') || n.includes('almond') || n.includes('peanut') || n.includes('walnut') || n.includes('kaju') || n.includes('badam')) return '🥜';
+  if (n.includes('pasta') || n.includes('noodle') || n.includes('spaghetti') || n.includes('ramen')) return '🍝';
+  if (n.includes('pizza') || n.includes('burger') || n.includes('sandwich')) return '🥪';
+  if (n.includes('water') || n.includes('juice') || n.includes('smoothie') || n.includes('rooh')) return '🥤';
+  if (n.includes('chola') || n.includes('chickpea') || n.includes('piaju') || n.includes('beguni') || n.includes('dal') || n.includes('lentil')) return '🧆';
+  return '🍽️';
+};
+
+export const getFrequentFoodItems = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // 1. Fetch user's FoodItem records ordered by frequency and recency
+    const userFoods = await FoodItem.find({ userId })
+      .sort({ timesUsed: -1, lastUsedAt: -1 })
+      .limit(10);
+
+    const frequentList = [];
+    const seenNames = new Set();
+
+    // Add user saved foods
+    for (const f of userFoods) {
+      const key = f.name.toLowerCase().trim();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        const unitType = f.unitType || 'piece';
+        const isGramOrMl = unitType === 'gram' || unitType === 'ml' || unitType === 'g';
+        frequentList.push({
+          _id: f._id,
+          name: f.name,
+          category: 'Personal Library',
+          unitType: unitType,
+          unit: unitType,
+          caloriesPerUnit: f.caloriesPerUnit,
+          proteinPerUnit: f.proteinPerUnit || 0,
+          carbsPerUnit: f.carbsPerUnit || 0,
+          fatPerUnit: f.fatPerUnit || 0,
+          caloriesPer100g: isGramOrMl ? f.caloriesPerUnit : undefined,
+          proteinPer100g: isGramOrMl ? f.proteinPerUnit : undefined,
+          carbsPer100g: isGramOrMl ? f.carbsPerUnit : undefined,
+          fatPer100g: isGramOrMl ? f.fatPerUnit : undefined,
+          caloriesPerPiece: !isGramOrMl ? f.caloriesPerUnit : undefined,
+          proteinPerPiece: !isGramOrMl ? f.proteinPerUnit : undefined,
+          carbsPerPiece: !isGramOrMl ? f.carbsPerUnit : undefined,
+          fatPerPiece: !isGramOrMl ? f.fatPerUnit : undefined,
+          timesUsed: f.timesUsed || 1,
+          source: f.timesUsed > 1 ? `Logged ${f.timesUsed}x` : 'Frequent Food',
+          icon: getFoodIcon(f.name),
+        });
+      }
+    }
+
+    // 2. If userFoods < 8, scan recent meals to pick up any logged food items
+    if (frequentList.length < 8) {
+      const recentMeals = await Meal.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(25);
+
+      const mealItemCounts = new Map();
+      const mealItemDetails = new Map();
+
+      for (const meal of recentMeals) {
+        if (Array.isArray(meal.items)) {
+          for (const item of meal.items) {
+            if (item.name) {
+              const nameKey = item.name.toLowerCase().trim();
+              mealItemCounts.set(nameKey, (mealItemCounts.get(nameKey) || 0) + 1);
+              if (!mealItemDetails.has(nameKey)) {
+                mealItemDetails.set(nameKey, item);
+              }
+            }
+          }
+        }
+      }
+
+      const sortedMealItems = Array.from(mealItemCounts.entries())
+        .sort((a, b) => b[1] - a[1]);
+
+      for (const [nameKey, count] of sortedMealItems) {
+        if (!seenNames.has(nameKey) && frequentList.length < 8) {
+          seenNames.add(nameKey);
+          const item = mealItemDetails.get(nameKey);
+          const unitType = item.unit || 'piece';
+          const qty = Number(item.quantity) || 1;
+          const isGramOrMl = unitType === 'gram' || unitType === 'ml' || unitType === 'g';
+
+          const calPerUnit = isGramOrMl
+            ? Math.round((Number(item.calories) / qty) * 100)
+            : Math.round(Number(item.calories) / qty);
+          const pPerUnit = isGramOrMl
+            ? Math.round(((Number(item.protein) || 0) / qty) * 100 * 10) / 10
+            : Math.round(((Number(item.protein) || 0) / qty) * 10) / 10;
+          const cPerUnit = isGramOrMl
+            ? Math.round(((Number(item.carbs) || 0) / qty) * 100 * 10) / 10
+            : Math.round(((Number(item.carbs) || 0) / qty) * 10) / 10;
+          const fPerUnit = isGramOrMl
+            ? Math.round(((Number(item.fat) || 0) / qty) * 100 * 10) / 10
+            : Math.round(((Number(item.fat) || 0) / qty) * 10) / 10;
+
+          frequentList.push({
+            name: item.name,
+            category: 'Recent Meals',
+            unitType: unitType,
+            unit: unitType,
+            caloriesPerUnit: calPerUnit,
+            proteinPerUnit: pPerUnit,
+            carbsPerUnit: cPerUnit,
+            fatPerUnit: fPerUnit,
+            caloriesPer100g: isGramOrMl ? calPerUnit : undefined,
+            proteinPer100g: isGramOrMl ? pPerUnit : undefined,
+            carbsPer100g: isGramOrMl ? cPerUnit : undefined,
+            fatPer100g: isGramOrMl ? fPerUnit : undefined,
+            caloriesPerPiece: !isGramOrMl ? calPerUnit : undefined,
+            proteinPerPiece: !isGramOrMl ? pPerUnit : undefined,
+            carbsPerPiece: !isGramOrMl ? cPerUnit : undefined,
+            fatPerPiece: !isGramOrMl ? fPerUnit : undefined,
+            timesUsed: count,
+            source: count > 1 ? `Logged ${count}x` : 'Recent Food',
+            icon: getFoodIcon(item.name),
+          });
+        }
+      }
+    }
+
+    // 3. If still < 6 (e.g., new user), fill with starter staples
+    const starterStaples = [
+      {
+        name: 'Chicken Breast',
+        category: 'Protein',
+        unitType: 'gram',
+        unit: 'gram',
+        caloriesPer100g: 165,
+        proteinPer100g: 31,
+        carbsPer100g: 0,
+        fatPer100g: 3.6,
+        caloriesPerUnit: 165,
+        proteinPerUnit: 31,
+        carbsPerUnit: 0,
+        fatPerUnit: 3.6,
+        source: 'Starter Staple',
+        icon: '🍗',
+      },
+      {
+        name: 'Boiled Egg',
+        category: 'Protein',
+        unitType: 'piece',
+        unit: 'piece',
+        caloriesPerPiece: 78,
+        proteinPerPiece: 6.3,
+        carbsPerPiece: 0.6,
+        fatPerPiece: 5.3,
+        caloriesPerUnit: 78,
+        proteinPerUnit: 6.3,
+        carbsPerUnit: 0.6,
+        fatPerUnit: 5.3,
+        source: 'Starter Staple',
+        icon: '🥚',
+      },
+      {
+        name: 'Brown Rice',
+        category: 'Grains',
+        unitType: 'gram',
+        unit: 'gram',
+        caloriesPer100g: 112,
+        proteinPer100g: 2.6,
+        carbsPer100g: 24,
+        fatPer100g: 0.9,
+        caloriesPerUnit: 112,
+        proteinPerUnit: 2.6,
+        carbsPerUnit: 24,
+        fatPerUnit: 0.9,
+        source: 'Starter Staple',
+        icon: '🍚',
+      },
+      {
+        name: 'Banana',
+        category: 'Fruits',
+        unitType: 'piece',
+        unit: 'piece',
+        caloriesPerPiece: 105,
+        proteinPerPiece: 1.3,
+        carbsPerPiece: 27,
+        fatPerPiece: 0.3,
+        caloriesPerUnit: 105,
+        proteinPerUnit: 1.3,
+        carbsPerUnit: 27,
+        fatPerUnit: 0.3,
+        source: 'Starter Staple',
+        icon: '🍌',
+      },
+      {
+        name: 'Oatmeal',
+        category: 'Grains',
+        unitType: 'gram',
+        unit: 'gram',
+        caloriesPer100g: 389,
+        proteinPer100g: 16.9,
+        carbsPer100g: 66,
+        fatPer100g: 6.9,
+        caloriesPerUnit: 389,
+        proteinPerUnit: 16.9,
+        carbsPerUnit: 66,
+        fatPerUnit: 6.9,
+        source: 'Starter Staple',
+        icon: '🥣',
+      },
+      {
+        name: 'Avocado',
+        category: 'Healthy Fats',
+        unitType: 'piece',
+        unit: 'piece',
+        caloriesPerPiece: 240,
+        proteinPerPiece: 3.0,
+        carbsPerPiece: 12,
+        fatPerPiece: 22,
+        caloriesPerUnit: 240,
+        proteinPerUnit: 3.0,
+        carbsPerUnit: 12,
+        fatPerUnit: 22,
+        source: 'Starter Staple',
+        icon: '🥑',
+      },
+    ];
+
+    for (const staple of starterStaples) {
+      const key = staple.name.toLowerCase().trim();
+      if (!seenNames.has(key) && frequentList.length < 8) {
+        seenNames.add(key);
+        frequentList.push(staple);
+      }
+    }
+
+    res.json(frequentList);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to fetch frequent food items' });
+  }
+};
+
 export const searchFoodItems = async (req, res) => {
   try {
     const { q } = req.query;
@@ -484,20 +741,51 @@ export const searchFoodItems = async (req, res) => {
       const key = (item.name || '').toLowerCase().trim();
       if (!seenNames.has(key)) {
         seenNames.add(key);
+        const itemUnit = item.unit || item.unitType || 'gram';
+        const isGramOrMl = itemUnit === 'gram' || itemUnit === 'g' || itemUnit === 'ml';
+
+        const calPerUnit = item.caloriesPerUnit !== undefined
+          ? Number(item.caloriesPerUnit)
+          : isGramOrMl
+          ? Number(item.caloriesPer100g ?? 100)
+          : Number(item.caloriesPerPiece ?? 100);
+
+        const pPerUnit = item.proteinPerUnit !== undefined
+          ? Number(item.proteinPerUnit)
+          : isGramOrMl
+          ? Number(item.proteinPer100g ?? 0)
+          : Number(item.proteinPerPiece ?? 0);
+
+        const cPerUnit = item.carbsPerUnit !== undefined
+          ? Number(item.carbsPerUnit)
+          : isGramOrMl
+          ? Number(item.carbsPer100g ?? 0)
+          : Number(item.carbsPerPiece ?? 0);
+
+        const fPerUnit = item.fatPerUnit !== undefined
+          ? Number(item.fatPerUnit)
+          : isGramOrMl
+          ? Number(item.fatPer100g ?? 0)
+          : Number(item.fatPerPiece ?? 0);
+
         combined.push({
           _id: item._id,
           name: item.name,
           category: item.category || 'General',
-          unit: item.unit || item.unitType || 'piece',
-          caloriesPerUnit: item.caloriesPerUnit || item.caloriesPerPiece || item.caloriesPer100g || 100,
-          caloriesPer100g: item.caloriesPer100g || (item.unit === 'gram' ? item.caloriesPerUnit : 100),
-          proteinPer100g: item.proteinPer100g || item.proteinPerUnit || 0,
-          carbsPer100g: item.carbsPer100g || item.carbsPerUnit || 0,
-          fatPer100g: item.fatPer100g || item.fatPerUnit || 0,
-          caloriesPerPiece: item.caloriesPerPiece || (item.unit === 'piece' ? item.caloriesPerUnit : 100),
-          proteinPerPiece: item.proteinPerPiece || item.proteinPerUnit || 0,
-          carbsPerPiece: item.carbsPerPiece || item.carbsPerUnit || 0,
-          fatPerPiece: item.fatPerPiece || item.fatPerUnit || 0,
+          unit: itemUnit,
+          unitType: itemUnit,
+          caloriesPerUnit: calPerUnit,
+          proteinPerUnit: pPerUnit,
+          carbsPerUnit: cPerUnit,
+          fatPerUnit: fPerUnit,
+          caloriesPer100g: item.caloriesPer100g || (isGramOrMl ? calPerUnit : 100),
+          proteinPer100g: item.proteinPer100g !== undefined ? item.proteinPer100g : (isGramOrMl ? pPerUnit : 0),
+          carbsPer100g: item.carbsPer100g !== undefined ? item.carbsPer100g : (isGramOrMl ? cPerUnit : 0),
+          fatPer100g: item.fatPer100g !== undefined ? item.fatPer100g : (isGramOrMl ? fPerUnit : 0),
+          caloriesPerPiece: item.caloriesPerPiece || (!isGramOrMl ? calPerUnit : 100),
+          proteinPerPiece: item.proteinPerPiece !== undefined ? item.proteinPerPiece : (!isGramOrMl ? pPerUnit : 0),
+          carbsPerPiece: item.carbsPerPiece !== undefined ? item.carbsPerPiece : (!isGramOrMl ? cPerUnit : 0),
+          fatPerPiece: item.fatPerPiece !== undefined ? item.fatPerPiece : (!isGramOrMl ? fPerUnit : 0),
           source,
         });
       }
@@ -617,16 +905,37 @@ export const getBodyMetrics = async (req, res) => {
 
 export const createBodyMetric = async (req, res) => {
   try {
-    const { date, weightKg, waistCm, chestCm, armCm, notes } = req.body;
+    const {
+      date,
+      weightKg,
+      heightCm,
+      waistCm,
+      bodyFatPercent,
+      chestCm,
+      armCm,
+      shouldersCm,
+      hipsCm,
+      thighsCm,
+      calvesCm,
+      neckCm,
+      notes,
+    } = req.body;
     if (!date) return res.status(400).json({ message: 'Date is required' });
 
     const metric = await BodyMetric.findOneAndUpdate(
       { userId: req.user._id, date },
       {
-        weightKg: weightKg ? Number(weightKg) : undefined,
-        waistCm: waistCm ? Number(waistCm) : undefined,
-        chestCm: chestCm ? Number(chestCm) : undefined,
-        armCm: armCm ? Number(armCm) : undefined,
+        weightKg: weightKg !== undefined && weightKg !== null && weightKg !== '' ? Number(weightKg) : undefined,
+        heightCm: heightCm !== undefined && heightCm !== null && heightCm !== '' ? Number(heightCm) : undefined,
+        waistCm: waistCm !== undefined && waistCm !== null && waistCm !== '' ? Number(waistCm) : undefined,
+        bodyFatPercent: bodyFatPercent !== undefined && bodyFatPercent !== null && bodyFatPercent !== '' ? Number(bodyFatPercent) : undefined,
+        chestCm: chestCm !== undefined && chestCm !== null && chestCm !== '' ? Number(chestCm) : undefined,
+        armCm: armCm !== undefined && armCm !== null && armCm !== '' ? Number(armCm) : undefined,
+        shouldersCm: shouldersCm !== undefined && shouldersCm !== null && shouldersCm !== '' ? Number(shouldersCm) : undefined,
+        hipsCm: hipsCm !== undefined && hipsCm !== null && hipsCm !== '' ? Number(hipsCm) : undefined,
+        thighsCm: thighsCm !== undefined && thighsCm !== null && thighsCm !== '' ? Number(thighsCm) : undefined,
+        calvesCm: calvesCm !== undefined && calvesCm !== null && calvesCm !== '' ? Number(calvesCm) : undefined,
+        neckCm: neckCm !== undefined && neckCm !== null && neckCm !== '' ? Number(neckCm) : undefined,
         notes: notes?.trim() || '',
       },
       { new: true, upsert: true }
@@ -643,12 +952,34 @@ export const updateBodyMetric = async (req, res) => {
     const metric = await BodyMetric.findOne({ _id: req.params.id, userId: req.user._id });
     if (!metric) return res.status(404).json({ message: 'Body metric not found' });
 
-    const { date, weightKg, waistCm, chestCm, armCm, notes } = req.body;
+    const {
+      date,
+      weightKg,
+      heightCm,
+      waistCm,
+      bodyFatPercent,
+      chestCm,
+      armCm,
+      shouldersCm,
+      hipsCm,
+      thighsCm,
+      calvesCm,
+      neckCm,
+      notes,
+    } = req.body;
+
     if (date) metric.date = date;
-    if (weightKg !== undefined) metric.weightKg = weightKg ? Number(weightKg) : undefined;
-    if (waistCm !== undefined) metric.waistCm = waistCm ? Number(waistCm) : undefined;
-    if (chestCm !== undefined) metric.chestCm = chestCm ? Number(chestCm) : undefined;
-    if (armCm !== undefined) metric.armCm = armCm ? Number(armCm) : undefined;
+    if (weightKg !== undefined) metric.weightKg = weightKg !== null && weightKg !== '' ? Number(weightKg) : undefined;
+    if (heightCm !== undefined) metric.heightCm = heightCm !== null && heightCm !== '' ? Number(heightCm) : undefined;
+    if (waistCm !== undefined) metric.waistCm = waistCm !== null && waistCm !== '' ? Number(waistCm) : undefined;
+    if (bodyFatPercent !== undefined) metric.bodyFatPercent = bodyFatPercent !== null && bodyFatPercent !== '' ? Number(bodyFatPercent) : undefined;
+    if (chestCm !== undefined) metric.chestCm = chestCm !== null && chestCm !== '' ? Number(chestCm) : undefined;
+    if (armCm !== undefined) metric.armCm = armCm !== null && armCm !== '' ? Number(armCm) : undefined;
+    if (shouldersCm !== undefined) metric.shouldersCm = shouldersCm !== null && shouldersCm !== '' ? Number(shouldersCm) : undefined;
+    if (hipsCm !== undefined) metric.hipsCm = hipsCm !== null && hipsCm !== '' ? Number(hipsCm) : undefined;
+    if (thighsCm !== undefined) metric.thighsCm = thighsCm !== null && thighsCm !== '' ? Number(thighsCm) : undefined;
+    if (calvesCm !== undefined) metric.calvesCm = calvesCm !== null && calvesCm !== '' ? Number(calvesCm) : undefined;
+    if (neckCm !== undefined) metric.neckCm = neckCm !== null && neckCm !== '' ? Number(neckCm) : undefined;
     if (notes !== undefined) metric.notes = notes.trim();
 
     await metric.save();
