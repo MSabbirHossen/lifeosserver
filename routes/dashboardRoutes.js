@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(protect);
 
+router.get('/', getDashboardSummary);
 router.get('/summary', getDashboardSummary);
 
 export default router;
