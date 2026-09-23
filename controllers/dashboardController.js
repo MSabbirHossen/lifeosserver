@@ -34,6 +34,12 @@ export const getDashboardSummary = async (req, res) => {
     const date = req.query.date || new Date().toISOString().split('T')[0];
     const monthStart = `${date.substring(0, 7)}-01`;
 
+    // Calculate a 180-day bounded window for active streak calculation to leverage compound indexes
+    const lookbackDateObj = new Date(date);
+    lookbackDateObj.setDate(lookbackDateObj.getDate() - 180);
+    const streakLookbackDate = lookbackDateObj.toISOString().split('T')[0];
+    const streakDateFilter = { $gte: streakLookbackDate, $lte: date };
+
     const [
       journal,
       prompts,
@@ -41,7 +47,6 @@ export const getDashboardSummary = async (req, res) => {
       studies,
       meals,
       workouts,
-      transactionsToday,
       transactionsMonth,
       salahLogs,
       habits,
@@ -51,24 +56,50 @@ export const getDashboardSummary = async (req, res) => {
       quranLogs,
       adhkarLogs,
       hadithLogs,
+      // Bounded streak activity queries (parallel indexed distincts)
+      pastHabitLogs,
+      pastStudies,
+      pastWorkouts,
+      pastTimeLogs,
+      pastJournals,
+      pastSalahLogs,
+      pastWaterLogs,
+      pastMeals,
+      pastQuranLogs,
+      pastAdhkarLogs,
+      pastHadithLogs,
     ] = await Promise.all([
-      Journal.findOne({ userId, date }),
-      JournalPrompt.find().sort({ lastServedAt: 1 }).limit(1),
-      TimeLog.find({ userId, date }),
-      StudySession.find({ userId, date }),
-      Meal.find({ userId, date }),
-      Workout.find({ userId, date }),
-      Transaction.find({ userId, date }),
-      Transaction.find({ userId, date: { $gte: monthStart, $lte: date } }),
-      SalahLog.find({ userId, date }),
-      Habit.find({ userId, archived: false }),
-      HabitLog.find({ userId, date }),
-      Goal.find({ userId, status: 'active' }),
-      WaterLog.find({ userId, date }),
-      QuranLog.find({ userId, date }),
-      AdhkarLog.find({ userId, date }),
-      HadithLog.find({ userId, date }),
+      Journal.findOne({ userId, date }).lean(),
+      JournalPrompt.find().sort({ lastServedAt: 1 }).limit(1).lean(),
+      TimeLog.find({ userId, date }).lean(),
+      StudySession.find({ userId, date }).lean(),
+      Meal.find({ userId, date }).lean(),
+      Workout.find({ userId, date }).lean(),
+      Transaction.find({ userId, date: { $gte: monthStart, $lte: date } }).lean(),
+      SalahLog.find({ userId, date }).lean(),
+      Habit.find({ userId, archived: false }).lean(),
+      HabitLog.find({ userId, date }).lean(),
+      Goal.find({ userId, status: 'active' }).lean(),
+      WaterLog.find({ userId, date }).lean(),
+      QuranLog.find({ userId, date }).lean(),
+      AdhkarLog.find({ userId, date }).lean(),
+      HadithLog.find({ userId, date }).lean(),
+      // Streak lookups (bounded to last 180 days)
+      HabitLog.distinct('date', { userId, completed: true, date: streakDateFilter }),
+      StudySession.distinct('date', { userId, date: streakDateFilter }),
+      Workout.distinct('date', { userId, date: streakDateFilter }),
+      TimeLog.distinct('date', { userId, date: streakDateFilter }),
+      Journal.distinct('date', { userId, date: streakDateFilter }),
+      SalahLog.distinct('date', { userId, status: { $nin: ['missed', 'pending'] }, date: streakDateFilter }),
+      WaterLog.distinct('date', { userId, date: streakDateFilter, $or: [{ glasses: { $gt: 0 } }, { ml: { $gt: 0 } }] }),
+      Meal.distinct('date', { userId, date: streakDateFilter }),
+      QuranLog.distinct('date', { userId, date: streakDateFilter }),
+      AdhkarLog.distinct('date', { userId, date: streakDateFilter, $or: [{ morningCompleted: true }, { eveningCompleted: true }] }),
+      HadithLog.distinct('date', { userId, date: streakDateFilter }),
     ]);
+
+    // Derive today transactions from the month query to eliminate redundant DB roundtrip
+    const transactionsToday = transactionsMonth.filter((t) => t.date === date);
 
     // Time calculation
     const timeMinutesTotal = timeLogs.reduce((sum, item) => sum + item.durationMinutes, 0);
@@ -123,33 +154,6 @@ export const getDashboardSummary = async (req, res) => {
       ...quranLogs.map((q) => q.date),
       ...adhkarLogs.filter((a) => a.morningCompleted || a.eveningCompleted).map((a) => a.date),
       ...hadithLogs.map((h) => h.date),
-    ]);
-
-    // Query past activity across all active Life OS modules to determine unbroken consecutive streak
-    const [
-      pastHabitLogs,
-      pastStudies,
-      pastWorkouts,
-      pastTimeLogs,
-      pastJournals,
-      pastSalahLogs,
-      pastWaterLogs,
-      pastMeals,
-      pastQuranLogs,
-      pastAdhkarLogs,
-      pastHadithLogs,
-    ] = await Promise.all([
-      HabitLog.distinct('date', { userId, completed: true }),
-      StudySession.distinct('date', { userId }),
-      Workout.distinct('date', { userId }),
-      TimeLog.distinct('date', { userId }),
-      Journal.distinct('date', { userId }),
-      SalahLog.distinct('date', { userId, status: { $nin: ['missed', 'pending'] } }),
-      WaterLog.distinct('date', { userId, $or: [{ glasses: { $gt: 0 } }, { ml: { $gt: 0 } }] }),
-      Meal.distinct('date', { userId }),
-      QuranLog.distinct('date', { userId }),
-      AdhkarLog.distinct('date', { userId, $or: [{ morningCompleted: true }, { eveningCompleted: true }] }),
-      HadithLog.distinct('date', { userId }),
     ]);
 
     const globalActiveDates = Array.from(new Set([
