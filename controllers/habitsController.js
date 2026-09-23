@@ -169,7 +169,7 @@ export const getHabits = async (req, res) => {
 // @access  Private
 export const createHabit = async (req, res) => {
   try {
-    const { name, category, targetFrequency, targetValue, unit, description } = req.body;
+    const { name, category, targetFrequency, customDays, targetValue, unit, description } = req.body;
 
     if (!name) {
       return res.status(400).json({ message: 'Habit name is required' });
@@ -178,9 +178,10 @@ export const createHabit = async (req, res) => {
     const habit = await Habit.create({
       userId: req.user._id,
       name: name.trim(),
-      category: category || 'Health',
+      category: category || 'Productivity',
       description: description?.trim() || '',
       targetFrequency: targetFrequency || 'daily',
+      customDays: Array.isArray(customDays) ? customDays : [],
       targetValue: targetValue || 1,
       unit: unit || '',
     });
@@ -208,12 +209,13 @@ export const updateHabit = async (req, res) => {
       return res.status(404).json({ message: 'Habit not found' });
     }
 
-    const { name, category, targetFrequency, targetValue, unit, description, archived } = req.body;
+    const { name, category, targetFrequency, customDays, targetValue, unit, description, archived } = req.body;
 
     if (name !== undefined) habit.name = name;
     if (category !== undefined) habit.category = category;
     if (description !== undefined) habit.description = description;
     if (targetFrequency !== undefined) habit.targetFrequency = targetFrequency;
+    if (customDays !== undefined) habit.customDays = Array.isArray(customDays) ? customDays : [];
     if (targetValue !== undefined) habit.targetValue = targetValue;
     if (unit !== undefined) habit.unit = unit;
     if (archived !== undefined) habit.archived = archived;

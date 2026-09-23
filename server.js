@@ -26,6 +26,7 @@ import goalsRoutes from './routes/goalsRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 
+// Life OS Backend Engine
 const app = express();
 
 // Enable GZIP compression for all responses

@@ -15,8 +15,22 @@ const habitSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['Health', 'Learning', 'Productivity', 'Deen', 'Mindset', 'Mindfulness', 'Other', 'General'],
-      default: 'Health',
+      enum: [
+        'Health',
+        'Learning',
+        'Productivity',
+        'Project / Work',
+        'Work',
+        'Project',
+        'Projects',
+        'Work & Projects',
+        'Deen',
+        'Mindset',
+        'Mindfulness',
+        'Other',
+        'General',
+      ],
+      default: 'Productivity',
     },
     description: {
       type: String,
@@ -25,8 +39,13 @@ const habitSchema = new mongoose.Schema(
     },
     targetFrequency: {
       type: String,
-      enum: ['daily', 'weekly'],
+      enum: ['daily', 'weekly', 'custom', 'Daily', 'Weekly', 'Custom'],
       default: 'daily',
+      set: (v) => (typeof v === 'string' ? v.toLowerCase() : v),
+    },
+    customDays: {
+      type: [String],
+      default: [],
     },
     targetValue: {
       type: Number,
