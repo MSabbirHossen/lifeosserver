@@ -10,6 +10,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import { connectDB, lastDbError } from './config/db.js';
@@ -26,6 +27,9 @@ import reportsRoutes from './routes/reportsRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 
 const app = express();
+
+// Enable GZIP compression for all responses
+app.use(compression());
 
 // Security Headers Middleware
 app.use(
