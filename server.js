@@ -164,6 +164,7 @@ app.use('/api/islamic', islamicRoutes); // Mounted: /salah, /qada, /hadith, /vow
 app.use('/api/study', studyRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/backup', reportsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // 404 handler

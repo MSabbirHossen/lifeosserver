@@ -2,14 +2,21 @@ import { Review } from '../models/Review.js';
 import { Journal } from '../models/Journal.js';
 import { TimeLog } from '../models/TimeLog.js';
 import { StudySession } from '../models/StudySession.js';
+import { StudyTopic } from '../models/StudyTopic.js';
 import { Meal } from '../models/Meal.js';
 import { Workout } from '../models/Workout.js';
+import { WorkoutType } from '../models/WorkoutType.js';
 import { BodyMetric } from '../models/BodyMetric.js';
+import { WaterLog } from '../models/WaterLog.js';
+import { FoodItem } from '../models/FoodItem.js';
 import { Transaction } from '../models/Transaction.js';
 import { SalahLog } from '../models/SalahLog.js';
 import { SalahVow } from '../models/SalahVow.js';
 import { QuranLog } from '../models/QuranLog.js';
 import { AdhkarLog } from '../models/AdhkarLog.js';
+import { IslamicFast } from '../models/IslamicFast.js';
+import { QadaLog } from '../models/QadaLog.js';
+import { HadithLog } from '../models/HadithLog.js';
 import { Habit } from '../models/Habit.js';
 import { HabitLog } from '../models/HabitLog.js';
 import { Goal } from '../models/Goal.js';
@@ -42,6 +49,18 @@ export const createOrUpdateReview = async (req, res) => {
   }
 };
 
+export const deleteReview = async (req, res) => {
+  try {
+    const review = await Review.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (!review) {
+      return res.status(404).json({ message: 'Review not found' });
+    }
+    res.json({ message: 'Review deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to delete review' });
+  }
+};
+
 // Export all user data to single JSON object
 export const exportUserDataJson = async (req, res) => {
   try {
@@ -51,14 +70,21 @@ export const exportUserDataJson = async (req, res) => {
       journals,
       timeLogs,
       studies,
+      studyTopics,
       meals,
       workouts,
+      workoutTypes,
       bodyMetrics,
+      waterLogs,
+      foodItems,
       transactions,
       salahLogs,
       salahVows,
       quranLogs,
       adhkarLogs,
+      fasts,
+      qadaLogs,
+      hadithLogs,
       habits,
       habitLogs,
       goals,
@@ -67,14 +93,21 @@ export const exportUserDataJson = async (req, res) => {
       Journal.find({ userId }),
       TimeLog.find({ userId }),
       StudySession.find({ userId }),
+      StudyTopic.find({ userId }),
       Meal.find({ userId }),
       Workout.find({ userId }),
+      WorkoutType.find({ userId }),
       BodyMetric.find({ userId }),
+      WaterLog.find({ userId }),
+      FoodItem.find({ userId }),
       Transaction.find({ userId }),
       SalahLog.find({ userId }),
       SalahVow.find({ userId }),
       QuranLog.find({ userId }),
       AdhkarLog.find({ userId }),
+      IslamicFast.find({ userId }),
+      QadaLog.find({ userId }),
+      HadithLog.find({ userId }),
       Habit.find({ userId }),
       HabitLog.find({ userId }),
       Goal.find({ userId }),
@@ -92,14 +125,21 @@ export const exportUserDataJson = async (req, res) => {
       journals,
       timeLogs,
       studies,
+      studyTopics,
       meals,
       workouts,
+      workoutTypes,
       bodyMetrics,
+      waterLogs,
+      foodItems,
       transactions,
       salahLogs,
       salahVows,
       quranLogs,
       adhkarLogs,
+      fasts,
+      qadaLogs,
+      hadithLogs,
       habits,
       habitLogs,
       goals,
