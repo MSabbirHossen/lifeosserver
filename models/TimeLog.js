@@ -15,7 +15,7 @@ const timeLogSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['Study', 'Fitness', 'Islamic', 'Work', 'Social', 'Sleep', 'Other'],
+      enum: ['Study', 'Fitness', 'Islamic', 'Work', 'Social', 'Sleep', 'Time Waste', 'Personal Task', 'Personal', 'Other'],
       required: true,
       default: 'Work',
     },
