@@ -25,6 +25,7 @@ import studyRoutes from './routes/studyRoutes.js';
 import goalsRoutes from './routes/goalsRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import fastingRoutes from './routes/fastingRoutes.js';
 
 // Life OS Backend Engine
 const app = express();
@@ -166,6 +167,7 @@ app.use('/api/goals', goalsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/backup', reportsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/fasting', fastingRoutes);
 
 // 404 handler
 app.use((req, res) => {
